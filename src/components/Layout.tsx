@@ -1,4 +1,6 @@
+import { useEffect } from 'react';
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
+import type { AuthProfile } from '../types/api';
 import {
   LayoutDashboard,
   Shield,
@@ -9,28 +11,70 @@ import {
   ChevronDown,
   LogOut,
   User,
+  Building2,
+  ClipboardCheck,
 } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '../store/authStore';
-import { useState } from 'react';
+import { authApi } from '../api/auth';
+import { auditorApi, type MyAssignmentsResult } from '../api/auditor';
 import { ChooseFrameworkBanner } from './ChooseFrameworkBanner';
+import { CreateOrganizationModal } from './CreateOrganizationModal';
+import { useState } from 'react';
 
-const navTabs = [
+const orgNavTabs = [
   { to: '/', label: 'Home', icon: FolderOpen },
-  { to: '/frameworks', label: 'Choose framework', icon: FolderOpen },
+  { to: '/frameworks', label: 'Frameworks', icon: FolderOpen },
   { to: '/controls', label: 'Controls', icon: Shield },
   { to: '/summary', label: 'Summary', icon: LayoutDashboard },
   { to: '/policies', label: 'Policies', icon: FileText },
-  { to: '/vendors', label: 'Questionnaires', icon: ClipboardList },
-  { to: '/risk', label: 'Risk Register', icon: Shield },
+  { to: '/vendors', label: 'Vendors', icon: ClipboardList },
+  { to: '/users', label: 'Users', icon: User },
+  { to: '/risk', label: 'Risk', icon: Shield },
   { to: '/report', label: 'Report', icon: FileText },
+  { to: '/evidence', label: 'Evidence', icon: FileText },
+  { to: '/ai-assessment', label: 'AI Assessment', icon: Shield },
+  { to: '/settings', label: 'Settings', icon: Settings },
+];
+
+const auditorNavTabs = [
+  { to: '/auditor', label: 'My assignments', icon: ClipboardCheck },
   { to: '/settings', label: 'Settings', icon: Settings },
 ];
 
 export function Layout() {
-  const { user, organization, logout } = useAuthStore();
+  const { user, organization, organizations, logout, setProfile } = useAuthStore();
   const navigate = useNavigate();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const [themeMenuOpen, setThemeMenuOpen] = useState(false);
+  const [orgSwitcherOpen, setOrgSwitcherOpen] = useState(false);
+
+  const { data: profile } = useQuery({
+    queryKey: ['auth', 'me'],
+    queryFn: authApi.me,
+    enabled: !!localStorage.getItem('accessToken') && (organizations.length === 0 || !organization),
+    staleTime: 60_000,
+  });
+
+  useEffect(() => {
+    if (!profile) return;
+    const p = profile as AuthProfile;
+    setProfile({
+      organizations: p.organizations ?? [],
+      roles: p.roles ?? [],
+      tprmAssignments: p.tprmAssignments ?? { asRespondent: [], asAssessor: [] },
+      organization: p.organization ?? null,
+    });
+  }, [profile, setProfile]);
+
+  const { data: auditorData } = useQuery({
+    queryKey: ['auditor', 'my-assignments'],
+    queryFn: auditorApi.myAssignments,
+    enabled: !!localStorage.getItem('accessToken'),
+  });
+
+  const assignments = (auditorData as MyAssignmentsResult | undefined)?.assignments ?? [];
+  const isAuditor = assignments.length > 0;
+  const navTabs = isAuditor ? auditorNavTabs : orgNavTabs;
 
   const handleLogout = () => {
     logout();
@@ -38,19 +82,37 @@ export function Layout() {
     setUserMenuOpen(false);
   };
 
+  const handleSwitchOrg = async (orgId: number) => {
+    try {
+      const tokens = await authApi.switchOrganization(orgId);
+      const org = organizations.find((o) => o.id === orgId);
+      if (org && tokens.organization) {
+        useAuthStore.getState().switchOrganization(
+          { id: tokens.organization.id, name: tokens.organization.name, slug: tokens.organization.slug, dateAdded: '', dateUpdated: '' },
+          tokens.accessToken,
+          tokens.refreshToken
+        );
+      }
+      setOrgSwitcherOpen(false);
+      window.location.reload();
+    } catch {
+      setOrgSwitcherOpen(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-surface-950 text-slate-200">
-      {/* Global header */}
+      <CreateOrganizationModal />
       <header className="sticky top-0 z-50 border-b border-slate-700/50 bg-surface-900/95 backdrop-blur">
         <div className="mx-auto flex h-14 items-center justify-between px-4">
           <div className="flex items-center gap-4">
-            <Link to="/" className="flex items-center gap-2 font-semibold text-white">
+            <Link to={isAuditor ? '/auditor' : '/'} className="flex items-center gap-2 font-semibold text-white">
               <Shield className="h-6 w-6 text-accent" />
               oditit
             </Link>
             <span className="text-slate-500">»</span>
             <nav className="hidden items-center gap-1 sm:flex">
-              {navTabs.slice(0, 3).map(({ to, label }) => (
+              {navTabs.slice(0, 4).map(({ to, label }) => (
                 <NavLink
                   key={to}
                   to={to}
@@ -64,40 +126,44 @@ export function Layout() {
             </nav>
           </div>
           <div className="flex items-center gap-2">
-            <a href="#" className="hidden rounded px-2 py-1 text-sm text-slate-400 hover:text-white sm:block">
-              Docs
-            </a>
-            <a href="#" className="hidden rounded px-2 py-1 text-sm text-slate-400 hover:text-white sm:block">
-              About
-            </a>
-            <a href="#" className="hidden rounded px-2 py-1 text-sm text-slate-400 hover:text-white sm:block">
-              Contact
-            </a>
-            <div className="relative">
-              <button
-                onClick={() => setThemeMenuOpen(!themeMenuOpen)}
-                className="rounded px-2 py-1 text-sm text-slate-400 hover:text-white"
-              >
-                Theme
-              </button>
-              {themeMenuOpen && (
-                <div className="absolute right-0 top-full mt-1 w-32 rounded border border-slate-600 bg-surface-800 py-1">
-                  <button className="w-full px-3 py-1 text-left text-sm hover:bg-slate-700">Dark</button>
-                  <button className="w-full px-3 py-1 text-left text-sm hover:bg-slate-700">Light</button>
-                </div>
-              )}
-            </div>
+            {organizations.length > 1 && (
+              <div className="relative">
+                <button
+                  onClick={() => setOrgSwitcherOpen(!orgSwitcherOpen)}
+                  className="flex items-center gap-1.5 rounded px-2 py-1 text-sm text-slate-300 hover:bg-slate-800"
+                >
+                  <Building2 className="h-4 w-4" />
+                  {organization?.name ?? 'Select org'}
+                  <ChevronDown className="h-4 w-4" />
+                </button>
+                {orgSwitcherOpen && (
+                  <div className="absolute right-0 top-full z-50 mt-1 w-56 rounded border border-slate-600 bg-surface-800 py-1 shadow-lg">
+                    {organizations.map((org) => (
+                      <button
+                        key={org.id}
+                        onClick={() => handleSwitchOrg(org.id)}
+                        className={`w-full px-3 py-2 text-left text-sm hover:bg-slate-700 ${
+                          organization?.id === org.id ? 'bg-accent/20 text-accent' : 'text-slate-300'
+                        }`}
+                      >
+                        {org.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             <div className="relative ml-2 border-l border-slate-600 pl-2">
               <button
                 onClick={() => setUserMenuOpen(!userMenuOpen)}
                 className="flex items-center gap-2 rounded px-2 py-1 text-sm hover:bg-slate-800"
               >
                 <User className="h-4 w-4" />
-                {user?.firstName ?? 'User'}
+                {user?.name ?? user?.email ?? 'User'}
                 <ChevronDown className="h-4 w-4" />
               </button>
               {userMenuOpen && (
-                <div className="absolute right-0 top-full mt-1 w-48 rounded border border-slate-600 bg-surface-800 py-1 shadow-lg">
+                <div className="absolute right-0 top-full z-50 mt-1 w-48 rounded border border-slate-600 bg-surface-800 py-1 shadow-lg">
                   <div className="border-b border-slate-600 px-3 py-2 text-xs text-slate-400">
                     {user?.email}
                     {organization && (
@@ -122,7 +188,6 @@ export function Layout() {
             </div>
           </div>
         </div>
-        {/* Context bar tabs */}
         <div className="flex gap-1 border-t border-slate-700/50 px-4 py-1">
           {navTabs.map(({ to, label, icon: Icon }) => (
             <NavLink
@@ -140,7 +205,7 @@ export function Layout() {
       </header>
 
       <main className="mx-auto max-w-7xl px-4 py-6">
-        <ChooseFrameworkBanner />
+        {!isAuditor && <ChooseFrameworkBanner />}
         <Outlet />
       </main>
     </div>

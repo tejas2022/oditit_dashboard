@@ -1,10 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
 import { dashboardApi } from '../api/dashboard';
+import { useAuthStore } from '../store/authStore';
 
 export function Report() {
+  const organization = useAuthStore((s) => s.organization);
   const { data, isLoading } = useQuery({
-    queryKey: ['dashboard', 'compliance-checker'],
+    queryKey: ['dashboard', 'compliance-checker', organization?.id],
     queryFn: dashboardApi.complianceChecker,
+    enabled: !!organization,
   });
 
   if (isLoading) {
@@ -15,7 +18,16 @@ export function Report() {
     );
   }
 
-  const gap = data as { total?: number; compliant?: number; nonCompliant?: number; gaps?: { controlName: string; status: string; missingEvidence?: boolean }[] } | undefined;
+  const gap = data as { total?: number; compliant?: number; nonCompliant?: number; gaps?: { controlName?: string; controlCode?: string; status: string; missingEvidence?: boolean }[] } | undefined;
+
+  if (!organization) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-2xl font-bold text-white">Report / Compliance</h1>
+        <p className="text-slate-400">Select or create an organisation to view compliance reports.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -42,7 +54,7 @@ export function Report() {
           <div className="divide-y divide-slate-700">
             {gap.gaps.map((g, i) => (
               <div key={i} className="flex items-center justify-between px-6 py-3">
-                <p className="font-medium text-white">{g.controlName}</p>
+                <p className="font-medium text-white">{g.controlName ?? g.controlCode ?? 'Control'}</p>
                 <span className="text-sm text-slate-400">{g.status}</span>
                 {g.missingEvidence && (
                   <span className="rounded bg-red-500/20 px-2 py-0.5 text-xs text-red-400">Missing evidence</span>

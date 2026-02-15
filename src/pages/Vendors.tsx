@@ -1,154 +1,406 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ClipboardList, Plus } from 'lucide-react';
+import { Plus, Search, Building2, Mail, AlertTriangle } from 'lucide-react';
 import { vendorsApi } from '../api/vendors';
-import type { Vendor } from '../types/api';
+import {
+  Card,
+  CardContent,
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+  TableEmptyState,
+  Button,
+  Input,
+  Select,
+  Modal,
+  StatusBadge,
+  Badge,
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  TabsContent,
+  Textarea,
+  Alert,
+} from '../components/ui';
+import type { TprmVendor, VendorStatus } from '../types/api';
+import { useAuthStore } from '../store/authStore';
 
 export function Vendors() {
-  const queryClient = useQueryClient();
-  const [page] = useState(1);
-  const [showCreate, setShowCreate] = useState(false);
-  const [form, setForm] = useState({
-    name: '',
-    email: '',
-    gstin: '',
-    website: '',
-    riskLevel: 'MEDIUM',
-  });
+  const organization = useAuthStore((s) => s.organization);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<VendorStatus | ''>('');
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [selectedVendor, setSelectedVendor] = useState<TprmVendor | null>(null);
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['vendors', page],
-    queryFn: () => vendorsApi.list({ page, limit: 10 }),
+  const queryClient = useQueryClient();
+
+  const { data: vendorsData, isLoading } = useQuery({
+    queryKey: ['vendors', organization?.id, searchTerm, statusFilter],
+    queryFn: () => vendorsApi.list({ page: 1, limit: 100 }),
+    enabled: !!organization,
   });
 
   const createMutation = useMutation({
-    mutationFn: () => vendorsApi.create(form),
+    mutationFn: vendorsApi.create,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['vendors'] });
-      setShowCreate(false);
-      setForm({ name: '', email: '', gstin: '', website: '', riskLevel: 'MEDIUM' });
+      setIsCreateModalOpen(false);
     },
   });
 
-  const list = Array.isArray(data) ? data : (data as { data?: Vendor[] })?.data ?? [];
+  const vendors = Array.isArray(vendorsData) ? vendorsData : (vendorsData as { data?: TprmVendor[] })?.data ?? [];
+
+  if (!organization) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-2xl font-bold text-white">Third-Party Risk Management</h1>
+        <p className="text-slate-400">Select or create an organisation to manage vendors.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-white">Vendor / Questionnaire</h1>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover"
-        >
-          <Plus className="h-4 w-4" /> Create Vendor
-        </button>
-      </div>
-
-      <div className="rounded-xl border border-slate-700 bg-surface-900 p-6">
-        <h2 className="mb-2 text-lg font-semibold text-white">General / Vendor Questionnaire</h2>
-        <p className="mb-6 text-slate-400">
-          This section is ready. You can add more questions or create a new section.
-        </p>
-        <div className="mb-6 rounded border border-slate-600 bg-surface-800 p-4">
-          <p className="text-sm text-slate-300">Critical Control list (e.g. G1)</p>
-          <p className="mt-2 text-sm text-slate-400">
-            Create and share questionnaires for vendors. Click to see more.
+        <div>
+          <h1 className="text-3xl font-bold text-white">Third-Party Risk Management</h1>
+          <p className="mt-1 text-slate-400">
+            Manage vendor relationships and assess third-party risks
           </p>
         </div>
+        <Button
+          variant="primary"
+          icon={<Plus className="h-4 w-4" />}
+          onClick={() => setIsCreateModalOpen(true)}
+        >
+          Add Vendor
+        </Button>
       </div>
 
-      <div className="rounded-xl border border-slate-700 bg-surface-900 overflow-hidden">
-        <div className="border-b border-slate-700 px-6 py-4">
-          <h2 className="font-semibold text-white">Vendors</h2>
-        </div>
-        {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="h-8 w-8 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+      {/* Filters */}
+      <Card>
+        <CardContent>
+          <div className="grid gap-4 md:grid-cols-3">
+            <Input
+              placeholder="Search vendors..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              icon={<Search className="h-4 w-4" />}
+            />
+            <Select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as VendorStatus | '')}
+              options={[
+                { value: '', label: 'All Statuses' },
+                { value: 'ACTIVE', label: 'Active' },
+                { value: 'INACTIVE', label: 'Inactive' },
+                { value: 'PENDING', label: 'Pending' },
+              ]}
+            />
           </div>
-        ) : (
-          <div className="divide-y divide-slate-700">
-            {list.map((v: Vendor) => (
-              <div
-                key={v.id}
-                className="flex items-center justify-between px-6 py-4 hover:bg-slate-800/50"
-              >
-                <div className="flex items-center gap-3">
-                  <ClipboardList className="h-5 w-5 text-slate-400" />
-                  <div>
-                    <p className="font-medium text-white">{v.name}</p>
-                    <p className="text-sm text-slate-400">
-                      {v.email ?? '—'} · Risk: {v.riskLevel ?? '—'}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+        </CardContent>
+      </Card>
 
-      {showCreate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="w-full max-w-md rounded-xl border border-slate-700 bg-surface-900 p-6">
-            <h2 className="mb-4 text-xl font-bold text-white">Create Vendor</h2>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                createMutation.mutate();
-              }}
-              className="space-y-4"
-            >
-              <div>
-                <label className="mb-1 block text-sm text-slate-400">Name</label>
-                <input
-                  value={form.name}
-                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                  className="w-full rounded-lg border border-slate-600 bg-surface-800 px-3 py-2 text-white"
-                  required
+      {/* Vendors Table */}
+      <Card>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Vendor Name</TableHead>
+                <TableHead>Contact</TableHead>
+                <TableHead>Industry</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Start Date</TableHead>
+                <TableHead>Expiration</TableHead>
+                <TableHead>Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="h-32 text-center text-slate-500">
+                    Loading...
+                  </TableCell>
+                </TableRow>
+              ) : vendors.length === 0 ? (
+                <TableEmptyState
+                  message="No vendors found. Add your first vendor to get started."
+                  icon={<Building2 className="h-12 w-12" />}
                 />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm text-slate-400">Email</label>
-                <input
-                  type="email"
-                  value={form.email}
-                  onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-                  className="w-full rounded-lg border border-slate-600 bg-surface-800 px-3 py-2 text-white"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm text-slate-400">Risk Level</label>
-                <select
-                  value={form.riskLevel}
-                  onChange={(e) => setForm((f) => ({ ...f, riskLevel: e.target.value }))}
-                  className="w-full rounded-lg border border-slate-600 bg-surface-800 px-3 py-2 text-white"
-                >
-                  <option value="LOW">Low</option>
-                  <option value="MEDIUM">Medium</option>
-                  <option value="HIGH">High</option>
-                  <option value="CRITICAL">Critical</option>
-                </select>
-              </div>
-              <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowCreate(false)}
-                  className="rounded-lg border border-slate-600 px-4 py-2 text-sm text-slate-300"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={createMutation.isPending}
-                  className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-                >
-                  Create
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+              ) : (
+                vendors.map((vendor: TprmVendor) => (
+                  <TableRow
+                    key={vendor.id}
+                    onClick={() => {
+                      setSelectedVendor(vendor);
+                      setIsDetailModalOpen(true);
+                    }}
+                  >
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <Building2 className="h-4 w-4 text-accent" />
+                        <span className="font-medium text-white">{vendor.name}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="text-sm">
+                        {vendor.email && (
+                          <div className="flex items-center gap-1 text-slate-400">
+                            <Mail className="h-3 w-3" />
+                            {vendor.email}
+                          </div>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge size="sm">{vendor.industry || 'N/A'}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <StatusBadge status={vendor.status} />
+                    </TableCell>
+                    <TableCell>
+                      <span className="text-sm">
+                        {vendor.startDate
+                          ? new Date(vendor.startDate).toLocaleDateString()
+                          : 'N/A'}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      {vendor.expirationDate ? (
+                        <div className="flex items-center gap-1">
+                          <span className="text-sm">
+                            {new Date(vendor.expirationDate).toLocaleDateString()}
+                          </span>
+                          {new Date(vendor.expirationDate) < new Date() && (
+                            <AlertTriangle className="h-3 w-3 text-red-400" />
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-sm text-slate-500">N/A</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Button size="sm" variant="ghost">
+                        View
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      {/* Create Vendor Modal */}
+      <CreateVendorModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onSubmit={createMutation.mutate}
+        isLoading={createMutation.isPending}
+      />
+
+      {/* Vendor Detail Modal */}
+      {selectedVendor && (
+        <VendorDetailModal
+          vendor={selectedVendor}
+          isOpen={isDetailModalOpen}
+          onClose={() => {
+            setIsDetailModalOpen(false);
+            setSelectedVendor(null);
+          }}
+        />
       )}
     </div>
+  );
+}
+
+// Create Vendor Modal
+function CreateVendorModal({
+  isOpen,
+  onClose,
+  onSubmit,
+  isLoading,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onSubmit: (data: any) => void;
+  isLoading: boolean;
+}) {
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    description: '',
+    industry: '',
+    status: 'ACTIVE' as VendorStatus,
+    startDate: '',
+    expirationDate: '',
+  });
+
+  const handleSubmit = () => {
+    onSubmit(formData);
+  };
+
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Add New Vendor"
+      size="md"
+      footer={
+        <div className="flex justify-end gap-3">
+          <Button variant="ghost" onClick={onClose} disabled={isLoading}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            loading={isLoading}
+            onClick={handleSubmit}
+            disabled={!formData.name}
+          >
+            Create Vendor
+          </Button>
+        </div>
+      }
+    >
+      <div className="space-y-4">
+        <Input
+          label="Vendor Name"
+          value={formData.name}
+          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+          required
+        />
+        <Input
+          label="Email"
+          type="email"
+          value={formData.email}
+          onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+        />
+        <Textarea
+          label="Description"
+          value={formData.description}
+          onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+          rows={3}
+        />
+        <div className="grid gap-4 md:grid-cols-2">
+          <Input
+            label="Industry"
+            value={formData.industry}
+            onChange={(e) => setFormData({ ...formData, industry: e.target.value })}
+          />
+          <Select
+            label="Status"
+            value={formData.status}
+            onChange={(e) =>
+              setFormData({ ...formData, status: e.target.value as VendorStatus })
+            }
+            options={[
+              { value: 'ACTIVE', label: 'Active' },
+              { value: 'INACTIVE', label: 'Inactive' },
+              { value: 'PENDING', label: 'Pending' },
+            ]}
+          />
+        </div>
+        <div className="grid gap-4 md:grid-cols-2">
+          <Input
+            label="Start Date"
+            type="date"
+            value={formData.startDate}
+            onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
+          />
+          <Input
+            label="Expiration Date"
+            type="date"
+            value={formData.expirationDate}
+            onChange={(e) =>
+              setFormData({ ...formData, expirationDate: e.target.value })
+            }
+          />
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+// Vendor Detail Modal
+function VendorDetailModal({
+  vendor,
+  isOpen,
+  onClose,
+}: {
+  vendor: TprmVendor;
+  isOpen: boolean;
+  onClose: () => void;
+}) {
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title={vendor.name} size="xl">
+      <Tabs defaultValue="overview">
+        <TabsList>
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="questionnaire">Questionnaire</TabsTrigger>
+          <TabsTrigger value="evidence">Evidence</TabsTrigger>
+          <TabsTrigger value="notes">Notes</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="overview">
+          <div className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <label className="text-sm font-medium text-slate-300">Status</label>
+                <div className="mt-1">
+                  <StatusBadge status={vendor.status} />
+                </div>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-300">Industry</label>
+                <p className="mt-1 text-slate-400">{vendor.industry || 'N/A'}</p>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-300">Email</label>
+                <p className="mt-1 text-slate-400">{vendor.email || 'N/A'}</p>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-300">Start Date</label>
+                <p className="mt-1 text-slate-400">
+                  {vendor.startDate
+                    ? new Date(vendor.startDate).toLocaleDateString()
+                    : 'N/A'}
+                </p>
+              </div>
+            </div>
+            {vendor.description && (
+              <div>
+                <label className="text-sm font-medium text-slate-300">Description</label>
+                <p className="mt-2 text-sm text-slate-400">{vendor.description}</p>
+              </div>
+            )}
+          </div>
+        </TabsContent>
+
+        <TabsContent value="questionnaire">
+          <Alert variant="info">
+            Questionnaire feature will allow vendors to answer compliance questions.
+          </Alert>
+        </TabsContent>
+
+        <TabsContent value="evidence">
+          <Alert variant="info">
+            Vendor evidence uploads will be displayed here.
+          </Alert>
+        </TabsContent>
+
+        <TabsContent value="notes">
+          <Alert variant="info">
+            Internal notes about this vendor will be shown here.
+          </Alert>
+        </TabsContent>
+      </Tabs>
+    </Modal>
   );
 }

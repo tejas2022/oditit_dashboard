@@ -4,10 +4,12 @@ import { Layout } from './components/Layout';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { Login } from './pages/Login';
 import { Register } from './pages/Register';
+import { AuthCallback } from './pages/AuthCallback';
 import { Home } from './pages/Home';
 import { Summary } from './pages/Summary';
 import { Controls } from './pages/Controls';
 import { Policies } from './pages/Policies';
+import { PolicyDetail } from './pages/PolicyDetail';
 import { Vendors } from './pages/Vendors';
 import { Users } from './pages/Users';
 import { Frameworks } from './pages/Frameworks';
@@ -16,6 +18,9 @@ import { Risk } from './pages/Risk';
 import { Report } from './pages/Report';
 import { Evidence } from './pages/Evidence';
 import { AIAssessment } from './pages/AIAssessment';
+import { AuditorHome } from './pages/AuditorHome';
+import { AuditorAssignment } from './pages/AuditorAssignment';
+import { SubcontrolDetail } from './pages/SubcontrolDetail';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -30,6 +35,7 @@ function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/auth/callback" element={<AuthCallback />} />
           <Route
             path="/"
             element={
@@ -41,7 +47,9 @@ function App() {
             <Route index element={<Home />} />
             <Route path="summary" element={<Summary />} />
             <Route path="controls" element={<Controls />} />
+            <Route path="controls/subcontrol/:id" element={<SubcontrolDetail />} />
             <Route path="policies" element={<Policies />} />
+            <Route path="policies/:id" element={<PolicyDetail />} />
             <Route path="vendors" element={<Vendors />} />
             <Route path="users" element={<Users />} />
             <Route path="frameworks" element={<Frameworks />} />
@@ -50,6 +58,8 @@ function App() {
             <Route path="report" element={<Report />} />
             <Route path="evidence" element={<Evidence />} />
             <Route path="ai-assessment" element={<AIAssessment />} />
+            <Route path="auditor" element={<AuditorHome />} />
+            <Route path="auditor/assignments/:organizationFrameworkId" element={<AuditorAssignment />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

@@ -2,16 +2,18 @@ import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { FolderOpen } from 'lucide-react';
 import { frameworksApi } from '../api/frameworks';
+import { useAuthStore } from '../store/authStore';
 
 /**
  * When the organisation has no activated frameworks, show a prominent banner
- * asking the user to choose a framework first. Shown on all authenticated pages
- * until at least one framework is activated.
+ * asking the user to choose a framework first. Only shown when user has an organisation.
  */
 export function ChooseFrameworkBanner() {
+  const organization = useAuthStore((s) => s.organization);
   const { data: activated, isLoading } = useQuery({
     queryKey: ['frameworks', 'activated'],
     queryFn: frameworksApi.activated,
+    enabled: !!organization,
   });
 
   const activatedList = Array.isArray(activated) ? activated : [];

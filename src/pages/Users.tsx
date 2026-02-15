@@ -3,22 +3,23 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Users as UsersIcon, Plus } from 'lucide-react';
 import { usersApi } from '../api/users';
 import type { User } from '../types/api';
+import { useAuthStore } from '../store/authStore';
 
 export function Users() {
+  const organization = useAuthStore((s) => s.organization);
   const queryClient = useQueryClient();
   const [page] = useState(1);
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({
     email: '',
     password: '',
-    firstName: '',
-    lastName: '',
-    role: 'EMPLOYEE',
+    name: '',
   });
 
   const { data, isLoading } = useQuery({
-    queryKey: ['users', page],
+    queryKey: ['users', organization?.id, page],
     queryFn: () => usersApi.list({ page, limit: 10 }),
+    enabled: !!organization,
   });
 
   const createMutation = useMutation({
@@ -26,11 +27,20 @@ export function Users() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
       setShowCreate(false);
-      setForm({ email: '', password: '', firstName: '', lastName: '', role: 'EMPLOYEE' });
+      setForm({ email: '', password: '', name: '' });
     },
   });
 
   const list = Array.isArray(data) ? data : (data as { data?: User[] })?.data ?? [];
+
+  if (!organization) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-2xl font-bold text-white">Users</h1>
+        <p className="text-slate-400">Select or create an organisation to manage users.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -59,9 +69,9 @@ export function Users() {
                   <UsersIcon className="h-5 w-5 text-slate-400" />
                   <div>
                     <p className="font-medium text-white">
-                      {u.firstName} {u.lastName}
+                      {u.name ?? u.email}
                     </p>
-                    <p className="text-sm text-slate-400">{u.email} · {u.role}</p>
+                    <p className="text-sm text-slate-400">{u.email}</p>
                   </div>
                 </div>
               </div>
@@ -101,40 +111,15 @@ export function Users() {
                   required
                 />
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="mb-1 block text-sm text-slate-400">First name</label>
-                  <input
-                    value={form.firstName}
-                    onChange={(e) => setForm((f) => ({ ...f, firstName: e.target.value }))}
-                    className="w-full rounded-lg border border-slate-600 bg-surface-800 px-3 py-2 text-white"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-sm text-slate-400">Last name</label>
-                  <input
-                    value={form.lastName}
-                    onChange={(e) => setForm((f) => ({ ...f, lastName: e.target.value }))}
-                    className="w-full rounded-lg border border-slate-600 bg-surface-800 px-3 py-2 text-white"
-                    required
-                  />
-                </div>
-              </div>
               <div>
-                <label className="mb-1 block text-sm text-slate-400">Role</label>
-                <select
-                  value={form.role}
-                  onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}
+                <label className="mb-1 block text-sm text-slate-400">Full name</label>
+                <input
+                  type="text"
+                  value={form.name}
+                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                   className="w-full rounded-lg border border-slate-600 bg-surface-800 px-3 py-2 text-white"
-                >
-                  <option value="EMPLOYEE">Employee</option>
-                  <option value="IT_TEAM">IT Team</option>
-                  <option value="SECURITY_TEAM">Security Team</option>
-                  <option value="CISO">CISO</option>
-                  <option value="ADMIN">Admin</option>
-                  <option value="AUDITOR">Auditor</option>
-                </select>
+                  required
+                />
               </div>
               <div className="flex justify-end gap-2">
                 <button

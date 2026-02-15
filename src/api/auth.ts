@@ -1,26 +1,33 @@
-import { api, getData } from '../lib/api';
-import type { ApiResponse } from '../types/api';
-import type { LoginResponse } from '../types/api';
+import { api } from '../lib/api';
+import type { LoginResponse, RegisterResponse, AuthProfile } from '../types/api';
+
+/** Auth endpoints return raw body (no responseFormatter wrapper) */
+function raw<T>(r: { data: T }) {
+  return r.data;
+}
 
 export const authApi = {
-  register: (body: {
-    email: string;
-    password: string;
-    firstName: string;
-    lastName: string;
-    organizationName: string;
-    gstin?: string;
-    industry?: string;
-  }) =>
-    api.post<ApiResponse<LoginResponse>>('/auth/register', body).then((r) => getData(r.data)),
+  register: (body: { email: string; password: string; name: string }) =>
+    api.post<RegisterResponse>('/auth/register', body).then(raw),
 
   login: (email: string, password: string) =>
-    api.post<ApiResponse<LoginResponse>>('/auth/login', { email, password }).then((r) => getData(r.data)),
+    api.post<LoginResponse>('/auth/login', { email, password }).then(raw),
 
   refresh: (refreshToken: string) =>
-    api.post<ApiResponse<{ accessToken: string; refreshToken: string }>>('/auth/refresh', { refreshToken }).then((r) => getData(r.data)),
+    api.post<{ accessToken: string; refreshToken: string }>('/auth/refresh', { refreshToken }).then(raw),
 
-  logout: (refreshToken?: string) => api.post<ApiResponse<unknown>>('/auth/logout', { refreshToken }).then((r) => getData(r.data)),
+  logout: (refreshToken?: string) =>
+    api.post<{ message?: string }>('/auth/logout', { refreshToken }).then(raw),
 
-  me: () => api.get<ApiResponse<{ user: unknown }>>('/auth/me').then((r) => getData(r.data)),
+  /** Full profile for org switcher, TPRM, roles (raw response) */
+  me: () => api.get<AuthProfile>('/auth/me').then(raw),
+
+  /** Switch organization context; returns new tokens and organization (raw response) */
+  switchOrganization: (organizationId: number) =>
+    api
+      .post<{ accessToken: string; refreshToken: string; organization: { id: number; name: string; slug: string } }>(
+        '/auth/switch-organization',
+        { organizationId }
+      )
+      .then(raw),
 };

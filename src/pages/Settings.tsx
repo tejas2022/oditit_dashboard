@@ -6,12 +6,11 @@ import { organizationsApi } from '../api/organizations';
 
 export function Settings() {
   const queryClient = useQueryClient();
-  const { user, organization } = useAuthStore();
+  const { user, organization, roles } = useAuthStore();
   const [name, setName] = useState(organization?.name ?? '');
-  const [industry, setIndustry] = useState(organization?.industry ?? '');
 
   const updateMutation = useMutation({
-    mutationFn: () => organizationsApi.updateMe({ name: name || undefined, industry: industry || undefined }),
+    mutationFn: () => (organization?.id ? organizationsApi.update(organization.id, { name: name || undefined }) : Promise.reject(new Error('No organisation'))),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['organizations'] }),
   });
 
@@ -24,9 +23,9 @@ export function Settings() {
             <User className="h-5 w-5" /> Profile
           </h2>
           <div className="space-y-2 text-sm">
-            <p><span className="text-slate-400">Name:</span> {user?.firstName} {user?.lastName}</p>
+            <p><span className="text-slate-400">Name:</span> {user?.name ?? user?.email}</p>
             <p><span className="text-slate-400">Email:</span> {user?.email}</p>
-            <p><span className="text-slate-400">Role:</span> {user?.role}</p>
+            <p><span className="text-slate-400">Roles:</span> {roles?.join(', ') ?? '—'}</p>
           </div>
         </div>
         <div className="rounded-xl border border-slate-700 bg-surface-900 p-6">
@@ -46,15 +45,6 @@ export function Settings() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 className="w-full rounded-lg border border-slate-600 bg-surface-800 px-3 py-2 text-white"
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm text-slate-400">Industry</label>
-              <input
-                value={industry}
-                onChange={(e) => setIndustry(e.target.value)}
-                className="w-full rounded-lg border border-slate-600 bg-surface-800 px-3 py-2 text-white"
-                placeholder="Technology"
               />
             </div>
             <button

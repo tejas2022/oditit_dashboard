@@ -4,6 +4,7 @@ import { useMutation } from '@tanstack/react-query';
 import { Shield } from 'lucide-react';
 import { authApi } from '../api/auth';
 import { useAuthStore } from '../store/authStore';
+import type { LoginResponse } from '../types/api';
 
 export function Login() {
   const [email, setEmail] = useState('');
@@ -12,11 +13,25 @@ export function Login() {
   const navigate = useNavigate();
   const location = useLocation();
   const setAuth = useAuthStore((s) => s.setAuth);
+  const setShowCreateOrgModal = useAuthStore((s) => s.setShowCreateOrgModal);
 
   const loginMutation = useMutation({
     mutationFn: () => authApi.login(email, password),
-    onSuccess: (data) => {
-      setAuth(data.user, data.organization, data.accessToken, data.refreshToken);
+    onSuccess: (data: LoginResponse) => {
+      setAuth(
+        data.user,
+        data.currentOrganization ?? null,
+        data.accessToken,
+        data.refreshToken,
+        {
+          organizations: data.organizations ?? [],
+          roles: data.roles ?? [],
+          tprmAssignments: data.tprmAssignments ?? { asRespondent: [], asAssessor: [] },
+        }
+      );
+      if (!data.organizations?.length) {
+        setShowCreateOrgModal(true);
+      }
       const from = (location.state as { from?: { pathname: string } })?.from?.pathname ?? '/';
       navigate(from, { replace: true });
     },
@@ -80,12 +95,20 @@ export function Login() {
             {loginMutation.isPending ? 'Signing in...' : 'Sign in'}
           </button>
         </form>
-        <p className="mt-6 text-center text-sm text-slate-400">
-          Don't have an account?{' '}
-          <Link to="/register" className="text-accent hover:underline">
-            Register
-          </Link>
-        </p>
+        <div className="mt-6 flex flex-col items-center gap-2 text-sm text-slate-400">
+          <a
+            href={`${import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000/api/v1'}/auth/google`}
+            className="rounded-lg border border-slate-600 bg-surface-800 px-4 py-2 text-white hover:bg-slate-700"
+          >
+            Sign in with Google
+          </a>
+          <p>
+            Don't have an account?{' '}
+            <Link to="/register" className="text-accent hover:underline">
+              Register
+            </Link>
+          </p>
+        </div>
       </div>
     </div>
   );

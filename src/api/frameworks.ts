@@ -24,6 +24,12 @@ export const frameworksApi = {
       .get<ApiResponse<ActivatedFramework[]>>('/frameworks/activated')
       .then((r) => getData(r.data)),
 
+  /** Alias for activated (used by Frameworks page) */
+  listActive: () =>
+    api
+      .get<ApiResponse<ActivatedFramework[]>>('/frameworks/activated')
+      .then((r) => getData(r.data)),
+
   /** POST /api/v1/frameworks/activate – select framework for the organisation (ADMIN, SUPER_ADMIN, CISO). Backend expects frameworkId as number. */
   activate: (frameworkId: string | number, targetDate?: string) =>
     api

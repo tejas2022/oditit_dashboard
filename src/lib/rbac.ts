@@ -12,6 +12,9 @@ const POLICY_CREATE_ROLES: UserRole[] = ['SUPER_ADMIN', 'ADMIN', 'CISO', 'SECURI
 /** Roles that can update control status */
 const CONTROL_UPDATE_ROLES: UserRole[] = ['SUPER_ADMIN', 'ADMIN', 'CISO', 'SECURITY_TEAM', 'IT_TEAM'];
 
+/** Roles that can change applicability (control/subcontrol) – org members/admins same as control update */
+const APPLICABILITY_ROLES: UserRole[] = ['SUPER_ADMIN', 'ADMIN', 'CISO', 'SECURITY_TEAM', 'IT_TEAM'];
+
 /** Roles that can assign controls */
 const CONTROL_ASSIGN_ROLES: UserRole[] = ['SUPER_ADMIN', 'ADMIN', 'CISO', 'SECURITY_TEAM'];
 
@@ -44,6 +47,10 @@ export function canCreatePolicies(role: UserRole | undefined): boolean {
 
 export function canUpdateControlStatus(role: UserRole | undefined): boolean {
   return role ? CONTROL_UPDATE_ROLES.includes(role) : false;
+}
+
+export function canChangeApplicability(role: UserRole | undefined): boolean {
+  return role ? APPLICABILITY_ROLES.includes(role) : false;
 }
 
 export function canAssignControls(role: UserRole | undefined): boolean {

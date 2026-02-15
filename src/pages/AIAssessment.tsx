@@ -3,17 +3,20 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Play, FileText } from 'lucide-react';
 import { aiAssessmentApi } from '../api/aiAssessment';
 import { controlsApi } from '../api/controls';
-import type { AssessmentReport } from '../types/api';
+import type { AssessmentReport, OrganizationControlInstance } from '../types/api';
+import { useAuthStore } from '../store/authStore';
 
 export function AIAssessment() {
+  const organization = useAuthStore((s) => s.organization);
   const queryClient = useQueryClient();
-  const [selectedControls, setSelectedControls] = useState<string[]>([]);
+  const [selectedControls, setSelectedControls] = useState<number[]>([]);
   const [provider, setProvider] = useState('openai');
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
 
   const { data: controlsData } = useQuery({
-    queryKey: ['controls'],
+    queryKey: ['controls', organization?.id],
     queryFn: () => controlsApi.list({ limit: 100 }),
+    enabled: !!organization,
   });
 
   const { data: history, isLoading } = useQuery({
@@ -22,7 +25,7 @@ export function AIAssessment() {
   });
 
   const assessMutation = useMutation({
-    mutationFn: () => aiAssessmentApi.assess({ controlIds: selectedControls, provider }),
+    mutationFn: () => aiAssessmentApi.assess({ controlIds: selectedControls.map(String), provider }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['ai-assessment'] });
     },
@@ -30,14 +33,23 @@ export function AIAssessment() {
 
   const controls = Array.isArray(controlsData)
     ? controlsData
-    : (controlsData as { data?: { id: string; control?: { name: string; code: string } }[] })?.data ?? [];
+    : (controlsData as { data?: OrganizationControlInstance[] })?.data ?? [];
   const reports = Array.isArray(history) ? history : (history as { data?: AssessmentReport[] })?.data ?? [];
 
-  const toggleControl = (id: string) => {
+  const toggleControl = (id: number) => {
     setSelectedControls((prev) =>
       prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]
     );
   };
+
+  if (!organization) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-2xl font-bold text-white">AI Assessment</h1>
+        <p className="text-slate-400">Select or create an organisation to run AI assessments.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -63,7 +75,7 @@ export function AIAssessment() {
         <div className="mb-4">
           <label className="mb-2 block text-sm text-slate-400">Select controls</label>
           <div className="max-h-48 overflow-auto rounded border border-slate-600 bg-surface-800 p-2">
-            {controls.slice(0, 50).map((c: { id: string; control?: { code: string; name: string } }) => (
+            {controls.slice(0, 50).map((c: OrganizationControlInstance) => (
               <label key={c.id} className="flex cursor-pointer items-center gap-2 py-1.5 px-2 hover:bg-slate-700/50">
                 <input
                   type="checkbox"
@@ -72,7 +84,7 @@ export function AIAssessment() {
                   className="rounded border-slate-600 bg-surface-800 text-accent"
                 />
                 <span className="text-sm text-slate-200">
-                  {c.control?.code ?? c.id.slice(0, 8)} — {c.control?.name ?? 'Control'}
+                  {c.frameworkControl?.refCode ?? String(c.id)} — {c.frameworkControl?.name ?? 'Control'}
                 </span>
               </label>
             ))}

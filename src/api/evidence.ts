@@ -13,7 +13,25 @@ export const evidenceApi = {
     api.post<ApiResponse<Evidence>>('/evidence', form, {
       headers: { 'Content-Type': 'multipart/form-data' },
     }).then((r) => getData(r.data)),
+  addFiles: (evidenceId: string, form: FormData) =>
+    api.post<ApiResponse<Evidence>>(`/evidence/${evidenceId}/files`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }).then((r) => getData(r.data)),
   updateStatus: (id: string, body: { status: string; reviewNotes?: string }) =>
     api.patch<ApiResponse<Evidence>>(`/evidence/${id}/status`, body).then((r) => getData(r.data)),
   delete: (id: string) => api.delete<ApiResponse<unknown>>(`/evidence/${id}`).then((r) => getData(r.data)),
+  /** Link evidence to a subcontrol instance. POST /evidence/:id/link */
+  linkToSubcontrol: (evidenceId: string, organizationSubcontrolInstanceId: number) =>
+    api
+      .post<ApiResponse<unknown>>(`/evidence/${evidenceId}/link`, {
+        organizationSubcontrolInstanceId,
+      })
+      .then((r) => getData(r.data)),
+  /** Unlink evidence from subcontrol. DELETE /evidence/:id/link/:organizationSubcontrolInstanceId */
+  unlinkFromSubcontrol: (evidenceId: string, organizationSubcontrolInstanceId: number) =>
+    api
+      .delete<ApiResponse<unknown>>(
+        `/evidence/${evidenceId}/link/${organizationSubcontrolInstanceId}`
+      )
+      .then((r) => getData(r.data)),
 };
