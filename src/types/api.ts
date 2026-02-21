@@ -77,9 +77,11 @@ export interface RefreshToken {
 export interface Organization {
   id: number;
   name: string;
-  slug?: string;
+  domainUrl?: string;
   complianceStartDate?: string;
   settings?: Record<string, any>;
+  /** Present when logo is set; from GET /organizations/:id */
+  logoUrl?: string;
   dateAdded: string;
   dateUpdated: string;
 }
@@ -145,7 +147,6 @@ export interface TprmAssignments {
 export interface UserOrganization {
   id: number;
   name: string;
-  slug: string;
   roles: string[];
 }
 
@@ -630,7 +631,7 @@ export interface AuditorAssignmentOrg {
 /** GET /auditor/assignments/:id - assignment detail */
 export interface AuditorAssignmentDetail {
   organizationFrameworkId: number;
-  organization: { id: number; name: string; slug?: string };
+  organization: { id: number; name: string };
   framework: { id: number; name: string; code?: string };
   grantFromDate: string;
   grantToDate: string;

@@ -25,7 +25,7 @@ export const authApi = {
   /** Switch organization context; returns new tokens and organization (raw response) */
   switchOrganization: (organizationId: number) =>
     api
-      .post<{ accessToken: string; refreshToken: string; organization: { id: number; name: string; slug: string } }>(
+      .post<{ accessToken: string; refreshToken: string; organization: { id: number; name: string } }>(
         '/auth/switch-organization',
         { organizationId }
       )

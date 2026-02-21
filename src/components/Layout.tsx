@@ -88,7 +88,7 @@ export function Layout() {
       const org = organizations.find((o) => o.id === orgId);
       if (org && tokens.organization) {
         useAuthStore.getState().switchOrganization(
-          { id: tokens.organization.id, name: tokens.organization.name, slug: tokens.organization.slug, dateAdded: '', dateUpdated: '' },
+          { id: tokens.organization.id, name: tokens.organization.name, dateAdded: '', dateUpdated: '' },
           tokens.accessToken,
           tokens.refreshToken
         );

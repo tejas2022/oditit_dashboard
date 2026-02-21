@@ -10,17 +10,25 @@ export const organizationsApi = {
       .get<ApiResponse<UserOrganization[]>>('/organizations/my-organizations')
       .then((r) => getData(r.data)),
 
-  /** Create organization (user becomes admin) */
-  create: (body: { name: string; slug?: string; complianceStartDate?: string }) =>
+  /** Create organization (user becomes admin). Slug is auto-generated internally. */
+  create: (body: { name: string; complianceStartDate?: string }) =>
     api.post<ApiResponse<Organization>>('/organizations', body).then((r) => getData(r.data)),
 
   /** Get one organization (by id) */
   get: (id: number) =>
     api.get<ApiResponse<Organization>>(`/organizations/${id}`).then((r) => getData(r.data)),
 
-  /** Update organization (admin only) */
-  update: (id: number, body: { name?: string; complianceStartDate?: string }) =>
+  /** Update organization (admin only). Name, domainUrl, complianceStartDate, settings. */
+  update: (id: number, body: { name?: string; domainUrl?: string; complianceStartDate?: string; settings?: Record<string, unknown> }) =>
     api.patch<ApiResponse<Organization>>(`/organizations/${id}`, body).then((r) => getData(r.data)),
+
+  /** Get organization logo URL (any member). Returns { logoUrl, s3Key }. */
+  getLogoUrl: (id: number) =>
+    api.get<ApiResponse<{ logoUrl: string; s3Key?: string }>>(`/organizations/${id}/logo`).then((r) => getData(r.data)),
+
+  /** Upload organization logo (admin only). FormData with key "file". */
+  uploadLogo: (id: number, form: FormData) =>
+    api.post<ApiResponse<Organization>>(`/organizations/${id}/upload-logo`, form).then((r) => getData(r.data)),
 
   /** Invite user to organization (admin only) */
   inviteUser: (id: number, body: { email: string; roles: string[] }) =>
