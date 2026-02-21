@@ -7,26 +7,24 @@ import { Modal, Button } from './ui';
 
 export function CreateOrganizationModal() {
   const [name, setName] = useState('');
-  const [slug, setSlug] = useState('');
   const [error, setError] = useState('');
   const showCreateOrgModal = useAuthStore((s) => s.showCreateOrgModal);
   const setShowCreateOrgModal = useAuthStore((s) => s.setShowCreateOrgModal);
   const switchOrganization = useAuthStore((s) => s.switchOrganization);
 
   const createMutation = useMutation({
-    mutationFn: () => organizationsApi.create({ name, ...(slug && { slug }) }),
-    onSuccess: async (data: { id: number; name: string; slug?: string }) => {
+    mutationFn: () => organizationsApi.create({ name }),
+    onSuccess: async (data: { id: number; name: string }) => {
       setError('');
       try {
         const tokens = await authApi.switchOrganization(data.id);
         switchOrganization(
-          { id: data.id, name: data.name, slug: data.slug ?? '', dateAdded: '', dateUpdated: '' },
+          { id: data.id, name: data.name, dateAdded: '', dateUpdated: '' },
           tokens.accessToken,
           tokens.refreshToken
         );
         setShowCreateOrgModal(false);
         setName('');
-        setSlug('');
       } catch (e: unknown) {
         setError((e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Failed to switch to organisation');
       }
@@ -81,16 +79,6 @@ export function CreateOrganizationModal() {
             onChange={(e) => setName(e.target.value)}
             className="w-full rounded-lg border border-slate-600 bg-surface-800 px-3 py-2 text-white focus:border-accent focus:outline-none"
             placeholder="Acme Corp"
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-sm text-slate-400">Slug (optional)</label>
-          <input
-            type="text"
-            value={slug}
-            onChange={(e) => setSlug(e.target.value)}
-            className="w-full rounded-lg border border-slate-600 bg-surface-800 px-3 py-2 text-white focus:border-accent focus:outline-none"
-            placeholder="acme-corp"
           />
         </div>
       </form>
