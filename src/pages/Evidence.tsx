@@ -10,6 +10,7 @@ import {
   X,
   File,
   Image,
+  Eye,
 } from 'lucide-react';
 import { evidenceApi } from '../api/evidence';
 import {
@@ -30,6 +31,7 @@ import {
   Alert,
   ConfirmModal,
 } from '../components/ui';
+import { EvidencePreviewModal } from '../components/EvidencePreviewModal';
 import type { Evidence } from '../types/api';
 import { useAuthStore } from '../store/authStore';
 
@@ -39,6 +41,8 @@ export function Evidence() {
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [selectedEvidence, setSelectedEvidence] = useState<Evidence | null>(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [previewEvidence, setPreviewEvidence] = useState<Evidence | null>(null);
+  const [previewFileIndex, setPreviewFileIndex] = useState(0);
   const [page, setPage] = useState(1);
 
   const queryClient = useQueryClient();
@@ -65,6 +69,44 @@ export function Evidence() {
       setSelectedEvidence(null);
     },
   });
+
+  const handleDownload = async (item: Evidence) => {
+    let files = item.files;
+    if (!files?.length) {
+      try {
+        const full = await evidenceApi.get(String(item.id));
+        files = full?.files ?? [];
+      } catch {
+        return;
+      }
+    }
+    if (!files?.length) return;
+    const file = files[0];
+    try {
+      const { url, fileName } = await evidenceApi.getFileDownloadUrl(String(item.id), file.id);
+      const res = await fetch(url);
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objectUrl;
+      a.download = fileName || file.fileName || 'evidence-file';
+      a.click();
+      URL.revokeObjectURL(objectUrl);
+    } catch {
+      // Fallback: open signed URL in new tab
+      try {
+        const { url } = await evidenceApi.getFileDownloadUrl(String(item.id), file.id);
+        window.open(url, '_blank');
+      } catch (_) {
+        // ignore
+      }
+    }
+  };
+
+  const openPreview = (item: Evidence, fileIndex = 0) => {
+    setPreviewEvidence(item);
+    setPreviewFileIndex(fileIndex);
+  };
 
   const evidence = Array.isArray(evidenceData) ? evidenceData : (evidenceData as { data?: Evidence[] })?.data ?? [];
   const meta = Array.isArray(evidenceData) ? undefined : (evidenceData as { meta?: { page: number; limit: number; total: number } })?.meta;
@@ -139,10 +181,14 @@ export function Evidence() {
                 evidence.map((item: Evidence) => (
                   <TableRow key={item.id}>
                     <TableCell>
-                      <div className="flex items-center gap-2">
-                        <FileText className="h-4 w-4 text-accent" />
+                      <button
+                        type="button"
+                        onClick={() => openPreview(item)}
+                        className="flex w-full items-center gap-2 text-left hover:opacity-80"
+                      >
+                        <FileText className="h-4 w-4 shrink-0 text-accent" />
                         <span className="font-medium text-white">{item.name}</span>
-                      </div>
+                      </button>
                     </TableCell>
                     <TableCell>
                       <span className="line-clamp-1 text-sm text-slate-400">
@@ -164,7 +210,20 @@ export function Evidence() {
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-2">
-                        <Button size="sm" variant="ghost">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => openPreview(item)}
+                          title="Preview"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleDownload(item)}
+                          title="Download"
+                        >
                           <Download className="h-4 w-4" />
                         </Button>
                         <Button
@@ -174,6 +233,7 @@ export function Evidence() {
                             setSelectedEvidence(item);
                             setIsDeleteModalOpen(true);
                           }}
+                          title="Delete"
                         >
                           <Trash2 className="h-4 w-4 text-red-400" />
                         </Button>
@@ -221,6 +281,17 @@ export function Evidence() {
         onClose={() => setIsUploadModalOpen(false)}
         onSubmit={uploadMutation.mutate}
         isLoading={uploadMutation.isPending}
+      />
+
+      {/* Evidence Preview Modal */}
+      <EvidencePreviewModal
+        evidence={previewEvidence}
+        fileIndex={previewFileIndex}
+        onClose={() => {
+          setPreviewEvidence(null);
+          setPreviewFileIndex(0);
+        }}
+        onFileIndexChange={setPreviewFileIndex}
       />
 
       {/* Delete Confirmation */}

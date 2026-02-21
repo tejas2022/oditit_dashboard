@@ -9,6 +9,7 @@ import {
   Activity,
 } from 'lucide-react';
 import { dashboardApi } from '../api/dashboard';
+import type { DashboardSummary, ControlStats } from '../types/api';
 import {
   Card,
   CardContent,
@@ -27,15 +28,15 @@ import { Link } from 'react-router-dom';
 export function Home() {
   const { organization } = useAuthStore();
 
-  const { data: summary, isLoading } = useQuery({
+  const { data: summary, isLoading } = useQuery<DashboardSummary>({
     queryKey: ['dashboard-summary', organization?.id],
-    queryFn: dashboardApi.summary,
+    queryFn: () => dashboardApi.summary(),
     enabled: !!organization,
   });
 
-  const { data: controlStats } = useQuery({
+  const { data: controlStats } = useQuery<ControlStats>({
     queryKey: ['control-stats', organization?.id],
-    queryFn: dashboardApi.controlStats,
+    queryFn: () => dashboardApi.controlStats(),
     enabled: !!organization,
   });
 

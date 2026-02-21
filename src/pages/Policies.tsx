@@ -1,15 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
-import {
-  Plus,
-  Search,
-  FileText,
-  ChevronDown,
-  Sparkles,
-  LayoutTemplate,
-  MoreVertical,
-} from 'lucide-react';
+import { Plus, FileText, Sparkles, LayoutTemplate } from 'lucide-react';
 import { policiesApi } from '../api/policies';
 import {
   Card,
@@ -39,7 +31,7 @@ export function Policies() {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [page, setPage] = useState(1);
-  const [createMode, setCreateMode] = useState<'none' | 'new' | 'template' | 'ai'>('none');
+  const [createMode, setCreateMode] = useState<'none' | 'new' | 'template' | 'ai' | 'upload-template'>('none');
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
   const { data: listResponse, isLoading } = useQuery({
@@ -131,6 +123,17 @@ export function Policies() {
                   <Sparkles className="h-4 w-4" />
                   Generate with AI
                 </button>
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-slate-200 hover:bg-slate-700"
+                  onClick={() => {
+                    setCreateMode('upload-template');
+                    setDropdownOpen(false);
+                  }}
+                >
+                  <LayoutTemplate className="h-4 w-4" />
+                  Create org template
+                </button>
               </div>
             </>
           )}
@@ -156,7 +159,7 @@ export function Policies() {
                 <TableHead>Description</TableHead>
                 <TableHead>Owner</TableHead>
                 <TableHead>Versions</TableHead>
-                <TableHead>Updated</TableHead>
+                <TableHead>Added</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -199,8 +202,8 @@ export function Policies() {
                     </TableCell>
                     <TableCell>
                       <span className="text-sm text-slate-400">
-                        {policy.dateUpdated
-                          ? new Date(policy.dateUpdated).toLocaleDateString()
+                        {policy.dateAdded
+                          ? new Date(policy.dateAdded).toLocaleDateString()
                           : '—'}
                       </span>
                     </TableCell>
@@ -287,6 +290,15 @@ export function Policies() {
           queryClient.invalidateQueries({ queryKey: ['policies'] });
           setCreateMode('none');
           if (id) navigate(`/policies/${id}`);
+        }}
+      />
+
+      <CreateTemplateModal
+        isOpen={createMode === 'upload-template'}
+        onClose={() => setCreateMode('none')}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ['policy-templates'] });
+          setCreateMode('none');
         }}
       />
     </div>
@@ -439,6 +451,7 @@ function CreateFromTemplateModal({
         <Alert variant="info">
           Default templates (e.g. Information Security, Acceptable Use) can be seeded with{' '}
           <code className="rounded bg-slate-700 px-1">npm run prisma:seed-templates</code> in the backend.
+          The template&apos;s text is loaded as the first version so you can edit it in the policy editor.
         </Alert>
         <Select
           label="Template"
@@ -454,6 +467,30 @@ function CreateFromTemplateModal({
         />
         {templateList.length === 0 && (
           <p className="text-sm text-slate-500">No templates yet. Create a new policy and save as template, or seed default templates in the backend.</p>
+        )}
+        {selectedTemplate && (
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                const text = selectedTemplate.content ?? '';
+                const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${selectedTemplate.name.replace(/[^a-zA-Z0-9-_]/g, '_')}-template.txt`;
+                a.click();
+                URL.revokeObjectURL(url);
+              }}
+            >
+              Download template as file
+            </Button>
+            <span className="text-xs text-slate-500">
+              Use this file to edit offline; create a policy from this template to load its text into the editor.
+            </span>
+          </div>
         )}
         <Input
           label="Policy name"
@@ -538,6 +575,91 @@ function GenerateWithAIModal({
           rows={4}
           required
         />
+      </div>
+    </Modal>
+  );
+}
+
+function CreateTemplateModal({
+  isOpen,
+  onClose,
+  onSuccess,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [content, setContent] = useState('');
+
+  const createMutation = useMutation({
+    mutationFn: () =>
+      policiesApi.createTemplate({
+        name: name.trim(),
+        description: description.trim() || undefined,
+        content: content.trim() || undefined,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['policy-templates'] });
+      setName('');
+      setDescription('');
+      setContent('');
+      onSuccess();
+      onClose();
+    },
+  });
+
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Create org template"
+      size="lg"
+      footer={
+        <div className="flex justify-end gap-3">
+          <Button variant="ghost" onClick={onClose} disabled={createMutation.isPending}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            onClick={() => createMutation.mutate()}
+            disabled={!name.trim() || createMutation.isPending}
+            loading={createMutation.isPending}
+          >
+            Create template
+          </Button>
+        </div>
+      }
+    >
+      <div className="space-y-4">
+        <Alert variant="info">
+          Org-specific templates appear in &quot;From template&quot; and can be used when creating new policies.
+        </Alert>
+        <Input
+          label="Template name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="e.g. Internal Security Policy"
+          required
+        />
+        <Input
+          label="Description (optional)"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="Brief description..."
+        />
+        <div>
+          <label className="mb-2 block text-sm font-medium text-slate-300">Content (optional)</label>
+          <Textarea
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            rows={8}
+            className="font-mono text-sm"
+            placeholder="Default content for policies created from this template..."
+          />
+        </div>
       </div>
     </Modal>
   );

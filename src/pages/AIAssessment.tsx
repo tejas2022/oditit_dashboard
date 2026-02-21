@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Play, FileText } from 'lucide-react';
 import { aiAssessmentApi } from '../api/aiAssessment';
 import { controlsApi } from '../api/controls';
+import { frameworksApi } from '../api/frameworks';
 import type { AssessmentReport, OrganizationControlInstance } from '../types/api';
 import { useAuthStore } from '../store/authStore';
 
@@ -13,10 +14,23 @@ export function AIAssessment() {
   const [provider, setProvider] = useState('openai');
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
 
-  const { data: controlsData } = useQuery({
-    queryKey: ['controls', organization?.id],
-    queryFn: () => controlsApi.list({ limit: 100 }),
+  const { data: activatedFrameworks } = useQuery({
+    queryKey: ['frameworks-activated'],
+    queryFn: frameworksApi.activated,
     enabled: !!organization,
+  });
+
+  const organizationFrameworkId =
+    activatedFrameworks && activatedFrameworks.length > 0 ? activatedFrameworks[0].id : null;
+
+  const { data: controlsData } = useQuery({
+    queryKey: ['controls', organization?.id, organizationFrameworkId],
+    queryFn: () =>
+      controlsApi.list({
+        organizationFrameworkId: organizationFrameworkId!,
+        limit: 100,
+      }),
+    enabled: !!organization && !!organizationFrameworkId,
   });
 
   const { data: history, isLoading } = useQuery({

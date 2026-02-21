@@ -1,5 +1,15 @@
 import type { UserRole } from '../types/api';
 
+/**
+ * Normalize role for comparison. Backend (ouditit) uses lowercase in constants/DB
+ * (e.g. 'admin', 'ciso', 'security_team'); dashboard uses UPPER_SNAKE_CASE.
+ * So we normalize to uppercase so both casings match.
+ */
+function toRole(role: UserRole | string | undefined): UserRole | undefined {
+  if (role == null || role === '') return undefined;
+  return String(role).toUpperCase().replace(/-/g, '_') as UserRole;
+}
+
 /** Roles that can create/edit users */
 const USER_MANAGE_ROLES: UserRole[] = ['SUPER_ADMIN', 'ADMIN'];
 
@@ -28,39 +38,46 @@ const AI_ASSESSMENT_ROLES: UserRole[] = ['SUPER_ADMIN', 'ADMIN', 'CISO', 'SECURI
 const FRAMEWORK_MANAGE_ROLES: UserRole[] = ['SUPER_ADMIN', 'ADMIN', 'CISO'];
 
 export function canManageFrameworks(role: UserRole | string | undefined): boolean {
-  if (!role) return false;
-  const normalized = String(role).toUpperCase() as UserRole;
-  return FRAMEWORK_MANAGE_ROLES.includes(normalized);
+  const r = toRole(role);
+  return r ? FRAMEWORK_MANAGE_ROLES.includes(r) : false;
 }
 
-export function canManageUsers(role: UserRole | undefined): boolean {
-  return role ? USER_MANAGE_ROLES.includes(role) : false;
+export function canManageUsers(role: UserRole | string | undefined): boolean {
+  const r = toRole(role);
+  return r ? USER_MANAGE_ROLES.includes(r) : false;
 }
 
-export function canApprovePolicies(role: UserRole | undefined): boolean {
-  return role ? POLICY_APPROVE_ROLES.includes(role) : false;
+export function canApprovePolicies(role: UserRole | string | undefined): boolean {
+  const r = toRole(role);
+  return r ? POLICY_APPROVE_ROLES.includes(r) : false;
 }
 
-export function canCreatePolicies(role: UserRole | undefined): boolean {
-  return role ? POLICY_CREATE_ROLES.includes(role) : false;
+export function canCreatePolicies(role: UserRole | string | undefined): boolean {
+  const r = toRole(role);
+  return r ? POLICY_CREATE_ROLES.includes(r) : false;
 }
 
-export function canUpdateControlStatus(role: UserRole | undefined): boolean {
-  return role ? CONTROL_UPDATE_ROLES.includes(role) : false;
+export function canUpdateControlStatus(role: UserRole | string | undefined): boolean {
+  const r = toRole(role);
+  return r ? CONTROL_UPDATE_ROLES.includes(r) : false;
 }
 
-export function canChangeApplicability(role: UserRole | undefined): boolean {
-  return role ? APPLICABILITY_ROLES.includes(role) : false;
+export function canChangeApplicability(role: UserRole | string | undefined): boolean {
+  const r = toRole(role);
+  return r ? APPLICABILITY_ROLES.includes(r) : false;
 }
 
-export function canAssignControls(role: UserRole | undefined): boolean {
-  return role ? CONTROL_ASSIGN_ROLES.includes(role) : false;
+export function canAssignControls(role: UserRole | string | undefined): boolean {
+  const r = toRole(role);
+  return r ? CONTROL_ASSIGN_ROLES.includes(r) : false;
 }
 
-export function canReviewEvidence(role: UserRole | undefined): boolean {
-  return role ? EVIDENCE_REVIEW_ROLES.includes(role) : false;
+export function canReviewEvidence(role: UserRole | string | undefined): boolean {
+  const r = toRole(role);
+  return r ? EVIDENCE_REVIEW_ROLES.includes(r) : false;
 }
 
-export function canRunAIAssessment(role: UserRole | undefined): boolean {
-  return role ? AI_ASSESSMENT_ROLES.includes(role) : false;
+export function canRunAIAssessment(role: UserRole | string | undefined): boolean {
+  const r = toRole(role);
+  return r ? AI_ASSESSMENT_ROLES.includes(r) : false;
 }

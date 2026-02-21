@@ -81,7 +81,12 @@ export const policiesApi = {
       .get<ApiResponse<PolicyVersion>>(`/policies/${policyId}/versions/${versionId}`)
       .then((r) => getData(r.data)),
 
-  /** POST /policies/:id/versions – add version (JSON: content, changeNote; or FormData with file) */
+  /**
+   * POST /policies/:id/versions – add version.
+   * - File upload (S3): pass FormData with field name "file" (File/Blob) and optional "changeNote".
+   *   Do not set Content-Type; the client will send multipart/form-data with boundary.
+   * - Editor content only: pass { content, changeNote } as JSON.
+   */
   addVersion: (
     policyId: string,
     body: { content?: string; changeNote?: string } | FormData

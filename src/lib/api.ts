@@ -19,6 +19,11 @@ export const api: AxiosInstance = axios.create({
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('accessToken');
   if (token) config.headers.Authorization = `Bearer ${token}`;
+  // When sending FormData (e.g. policy version file upload), do NOT set Content-Type
+  // so the browser sets multipart/form-data with the correct boundary; otherwise the backend won't receive the file.
+  if (config.data instanceof FormData && config.headers) {
+    delete config.headers['Content-Type'];
+  }
   return config;
 });
 

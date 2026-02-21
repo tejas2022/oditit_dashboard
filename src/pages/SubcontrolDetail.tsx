@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { controlsApi } from '../api/controls';
 import { EvidenceForSubcontrolModal } from '../components/EvidenceForSubcontrolModal';
+import { EvidencePreviewModal } from '../components/EvidencePreviewModal';
 import {
   Card,
   CardContent,
@@ -23,10 +24,9 @@ import {
   Progress,
   Alert,
 } from '../components/ui';
-import type { OrganizationSubcontrolInstance } from '../types/api';
 import { useAuthStore } from '../store/authStore';
 import { canChangeApplicability, canRunAIAssessment } from '../lib/rbac';
-import type { UserRole } from '../types/api';
+import type { Evidence, UserRole } from '../types/api';
 
 export function SubcontrolDetail() {
   const { id } = useParams<{ id: string }>();
@@ -38,6 +38,8 @@ export function SubcontrolDetail() {
 
   const [newNote, setNewNote] = useState('');
   const [evidenceModalOpen, setEvidenceModalOpen] = useState(false);
+  const [previewEvidence, setPreviewEvidence] = useState<Evidence | null>(null);
+  const [previewFileIndex, setPreviewFileIndex] = useState(0);
 
   const { data: subcontrol, isLoading } = useQuery({
     queryKey: ['subcontrol', id],
@@ -228,12 +230,13 @@ export function SubcontrolDetail() {
                     className="flex items-center justify-between rounded border border-slate-700 bg-slate-800/30 px-3 py-2"
                   >
                     <span className="text-sm text-white">{link.evidence?.name}</span>
-                    <Link
-                      to={`/evidence?highlight=${link.evidence?.id}`}
+                    <button
+                      type="button"
+                      onClick={() => link.evidence && setPreviewEvidence(link.evidence)}
                       className="text-xs text-accent hover:underline"
                     >
                       View
-                    </Link>
+                    </button>
                   </li>
                 ))}
               </ul>
@@ -258,6 +261,16 @@ export function SubcontrolDetail() {
         onSuccess={() => {
           queryClient.invalidateQueries({ queryKey: ['subcontrol', id] });
         }}
+      />
+
+      <EvidencePreviewModal
+        evidence={previewEvidence}
+        fileIndex={previewFileIndex}
+        onClose={() => {
+          setPreviewEvidence(null);
+          setPreviewFileIndex(0);
+        }}
+        onFileIndexChange={setPreviewFileIndex}
       />
 
       <Card>

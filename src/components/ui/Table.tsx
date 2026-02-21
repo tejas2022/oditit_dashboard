@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { ReactNode, MouseEvent } from 'react';
 
 interface TableProps {
   children: ReactNode;
@@ -69,11 +69,16 @@ interface TableCellProps {
   children: ReactNode;
   className?: string;
   colSpan?: number;
+  onClick?: (e: MouseEvent<HTMLTableDataCellElement>) => void;
 }
 
-export function TableCell({ children, className = '', colSpan }: TableCellProps) {
+export function TableCell({ children, className = '', colSpan, onClick }: TableCellProps) {
   return (
-    <td className={`px-4 py-3 text-sm text-slate-300 ${className}`} colSpan={colSpan}>
+    <td
+      className={`px-4 py-3 text-sm text-slate-300 ${className}`}
+      colSpan={colSpan}
+      onClick={onClick}
+    >
       {children}
     </td>
   );

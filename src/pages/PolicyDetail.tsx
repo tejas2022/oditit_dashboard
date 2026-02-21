@@ -27,7 +27,8 @@ import {
   Input,
   Select,
 } from '../components/ui';
-import type { Policy, PolicyVersion, OrganizationControlInstance, OrganizationSubcontrolInstance } from '../types/api';
+import { PolicyEditor, type PolicyEditorHandle } from '../components/PolicyEditor';
+import type { OrganizationControlInstance } from '../types/api';
 import { useAuthStore } from '../store/authStore';
 
 /** Strip markdown code fences if LLM returns them by mistake */
@@ -41,9 +42,7 @@ function stripMarkdownFences(text: string): string {
 
 export function PolicyDetail() {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const organization = useAuthStore((s) => s.organization);
 
   const [selectedVersionId, setSelectedVersionId] = useState<number | null>(null);
   const [viewMode, setViewMode] = useState<'view' | 'edit'>('view');
@@ -52,7 +51,8 @@ export function PolicyDetail() {
   const [isAttachOpen, setIsAttachOpen] = useState(false);
   const [isEnhanceOpen, setIsEnhanceOpen] = useState(false);
   const [enhanceSelectionRange, setEnhanceSelectionRange] = useState<{ start: number; end: number } | null>(null);
-  const editorRef = useRef<HTMLTextAreaElement>(null);
+  const [quillSelection, setQuillSelection] = useState<{ index: number; length: number } | null>(null);
+  const editorRef = useRef<PolicyEditorHandle>(null);
 
   const { data: policy, isLoading } = useQuery({
     queryKey: ['policy', id],
@@ -89,32 +89,34 @@ export function PolicyDetail() {
     },
   });
 
-  const updatePolicyMutation = useMutation({
-    mutationFn: (body: { name?: string; description?: string }) =>
-      policiesApi.update(id!, body),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['policy', id] });
-      queryClient.invalidateQueries({ queryKey: ['policies'] });
-    },
-  });
-
   const enhanceMutation = useMutation({
-    mutationFn: (payload: { userDescription: string; range: { start: number; end: number } }) => {
-      const selectedText = editContent.slice(payload.range.start, payload.range.end);
+    mutationFn: (payload: { userDescription: string; quillSelection: { index: number; length: number } | null }) => {
+      const fullPolicyContent = editorRef.current?.getPlainText() ?? '';
+      const selectedText = editorRef.current?.getSelectedText() ?? '';
       return policiesApi.enhanceSelection({
         policyName: policy!.name,
-        fullPolicyContent: editContent,
+        fullPolicyContent,
         selectedText: selectedText || undefined,
         userDescription: payload.userDescription,
       });
     },
     onSuccess: (data, payload) => {
-      applyEnhancedText(data.enhancedText, payload.range);
+      const trimmed = stripMarkdownFences(data.enhancedText);
+      const sel = payload.quillSelection ?? editorRef.current?.getQuillSelection();
+      if (sel) editorRef.current?.insertAtSelection(sel.index, sel.length, trimmed);
+      setQuillSelection(null);
+      setEnhanceSelectionRange(null);
+      setIsEnhanceOpen(false);
+      requestAnimationFrame(() => editorRef.current?.focus());
     },
   });
 
   const handleDownload = () => {
-    const text = versionDetail?.content ?? currentVersion?.content ?? '';
+    // Download what is currently displayed: in edit mode = editor content, in view mode = selected version
+    const text =
+      viewMode === 'edit'
+        ? editContent
+        : (versionDetail?.content ?? currentVersion?.content ?? '');
     const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -130,7 +132,15 @@ export function PolicyDetail() {
   };
 
   const handleSaveEdit = () => {
-    addVersionMutation.mutate({ content: editContent, changeNote: 'Edited in dashboard' });
+    // Send as FILE so backend can upload to S3 (uploadPolicyFile)
+    const blob = new Blob([editContent], { type: 'text/plain;charset=utf-8' });
+    const nextNum = (currentVersion?.versionNumber ?? 0) + 1;
+    const fileName = `${(policy?.name ?? 'policy').replace(/[^a-zA-Z0-9-_]/g, '_')}-v${nextNum}.txt`;
+    const file = new File([blob], fileName, { type: 'text/plain;charset=utf-8' });
+    const form = new FormData();
+    form.append('file', file);
+    form.append('changeNote', 'Saved from dashboard editor');
+    addVersionMutation.mutate(form);
   };
 
   const handleVersionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -154,29 +164,14 @@ export function PolicyDetail() {
   const handleOpenEnhance = () => {
     const el = editorRef.current;
     if (el) {
-      setEnhanceSelectionRange({ start: el.selectionStart, end: el.selectionEnd });
-      setIsEnhanceOpen(true);
+      const range = el.getSelectionRange();
+      setEnhanceSelectionRange(range);
+      setQuillSelection(el.getQuillSelection());
     } else {
       setEnhanceSelectionRange({ start: editContent.length, end: editContent.length });
-      setIsEnhanceOpen(true);
+      setQuillSelection(null);
     }
-  };
-
-  const applyEnhancedText = (enhancedText: string, range: { start: number; end: number }) => {
-    const trimmed = stripMarkdownFences(enhancedText);
-    const hasSelection = range.start !== range.end;
-    const newContent = hasSelection
-      ? editContent.slice(0, range.start) + trimmed + editContent.slice(range.end)
-      : editContent.slice(0, range.start) + trimmed + editContent.slice(range.start);
-    setEditContent(newContent);
-    setEnhanceSelectionRange(null);
-    setIsEnhanceOpen(false);
-    requestAnimationFrame(() => {
-      editorRef.current?.focus();
-      const newStart = range.start;
-      const newEnd = newStart + trimmed.length;
-      editorRef.current?.setSelectionRange(newStart, newEnd);
-    });
+    setIsEnhanceOpen(true);
   };
 
   if (!id) {
@@ -220,17 +215,23 @@ export function PolicyDetail() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <select
-            value={String(currentVersionId)}
-            onChange={handleVersionChange}
-            className="min-w-[180px] rounded border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-white"
-          >
-            {sortedVersions.map((v) => (
-              <option key={v.id} value={String(v.id)}>
-                Version {v.versionNumber}{v.createdAt ? ` (${new Date(v.createdAt).toLocaleDateString()})` : ''}
-              </option>
-            ))}
-          </select>
+          {sortedVersions.length > 0 ? (
+            <select
+              value={String(currentVersionId)}
+              onChange={handleVersionChange}
+              className="min-w-[180px] rounded border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-white"
+            >
+              {sortedVersions.map((v) => (
+                <option key={v.id} value={String(v.id)}>
+                  Version {v.versionNumber}{v.createdAt ? ` (${new Date(v.createdAt).toLocaleDateString()})` : ''}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <span className="rounded border border-slate-600 bg-slate-800/50 px-3 py-2 text-sm text-slate-500">
+              No versions yet
+            </span>
+          )}
           <Button variant="outline" size="sm" icon={<Download className="h-4 w-4" />} onClick={handleDownload}>
             Download
           </Button>
@@ -271,7 +272,14 @@ export function PolicyDetail() {
           <Button variant="outline" size="sm" icon={<Plus className="h-4 w-4" />} onClick={() => setIsAddVersionOpen(true)}>
             Add version
           </Button>
-          <Button variant="outline" size="sm" icon={<Link2 className="h-4 w-4" />} onClick={() => setIsAttachOpen(true)}>
+          <Button
+            variant="outline"
+            size="sm"
+            icon={<Link2 className="h-4 w-4" />}
+            onClick={() => setIsAttachOpen(true)}
+            disabled={sortedVersions.length === 0 || !currentVersionId}
+            title={sortedVersions.length === 0 ? 'Add a version first' : undefined}
+          >
             Attach to control
           </Button>
         </div>
@@ -281,7 +289,7 @@ export function PolicyDetail() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             {viewMode === 'view' ? <Eye className="h-5 w-5" /> : <Edit3 className="h-5 w-5" />}
-            {viewMode === 'view' ? 'Content' : 'Editing content'}
+            {viewMode === 'view' ? 'Content (view mode)' : 'Editing content (edit mode)'}
             {currentVersion && (
               <Badge size="sm" variant="info">
                 v{currentVersion.versionNumber}
@@ -309,20 +317,22 @@ export function PolicyDetail() {
                   </span>
                 </div>
               )}
-              <Textarea
+              <PolicyEditor
                 ref={editorRef}
                 value={editContent}
-                onChange={(e) => setEditContent(e.target.value)}
-                rows={24}
-                className="font-mono text-sm resize-y min-h-[28rem]"
-                placeholder="Policy content... Select text and use Enhance with AI to improve a section, or add a new section with no selection. Shortcut: Ctrl+E / Cmd+E"
+                onChange={setEditContent}
+                placeholder="Policy content... Select text and use Enhance with AI (Ctrl+E / Cmd+E). Use toolbar for Bold, Italic, Underline."
                 disabled={enhanceMutation.isPending}
+                onDownload={handleDownload}
               />
             </div>
           ) : (
             <div className="rounded-lg border border-slate-700 bg-slate-900/30 p-4">
-              <pre className="whitespace-pre-wrap break-words font-mono text-sm text-slate-300">
-                {displayContent || 'No content for this version.'}
+              <pre className="whitespace-pre-wrap break-words font-mono text-sm text-slate-300 min-h-[20rem]">
+                {displayContent ||
+                  (sortedVersions.length === 0
+                    ? 'No versions yet. Click "Add version" to add the first version (paste content or upload a file).'
+                    : 'No content for this version.')}
               </pre>
             </div>
           )}
@@ -341,7 +351,7 @@ export function PolicyDetail() {
 
       <AttachToSubcontrolModal
         policyId={id}
-        versionId={currentVersionId}
+        versionId={currentVersionId ?? 0}
         policyName={policy.name}
         isOpen={isAttachOpen}
         onClose={() => setIsAttachOpen(false)}
@@ -356,11 +366,10 @@ export function PolicyDetail() {
         onClose={() => {
           setIsEnhanceOpen(false);
           setEnhanceSelectionRange(null);
+          setQuillSelection(null);
         }}
         onSubmit={(userDescription) => {
-          if (enhanceSelectionRange) {
-            enhanceMutation.mutate({ userDescription, range: enhanceSelectionRange });
-          }
+          enhanceMutation.mutate({ userDescription, quillSelection: quillSelection });
         }}
         isLoading={enhanceMutation.isPending}
         hasSelection={enhanceSelectionRange ? enhanceSelectionRange.start !== enhanceSelectionRange.end : false}

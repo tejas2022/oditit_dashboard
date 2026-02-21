@@ -1,7 +1,7 @@
 import { useState } from 'react';
+import type { MouseEvent } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  Search,
   Filter,
   Plus,
   Upload,
@@ -63,6 +63,13 @@ export function Controls() {
   const [evidenceModalSubcontrol, setEvidenceModalSubcontrol] = useState<{
     id: number;
     label: string;
+  } | null>(null);
+  const [lastFrameworkResult, setLastFrameworkResult] = useState<{
+    summary: string;
+    score: number;
+    isCompliant: boolean;
+    findings?: string;
+    recommendations?: string;
   } | null>(null);
 
   const queryClient = useQueryClient();
@@ -154,9 +161,29 @@ export function Controls() {
   const aiAssessFrameworkMutation = useMutation({
     mutationFn: () =>
       controlsApi.aiAssessFramework(effectiveOrgFrameworkId as number),
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['controls'] });
       queryClient.invalidateQueries({ queryKey: ['control'] });
+      if (data?.frameworkAssessmentResult || data?.assessment) {
+        const r = data.frameworkAssessmentResult ?? data.assessment;
+        setLastFrameworkResult({
+          summary: r.summary ?? '',
+          score: r.score ?? 0,
+          isCompliant: r.isCompliant ?? false,
+          findings: r.findings,
+          recommendations: r.recommendations,
+        });
+      }
+    },
+  });
+
+  const aiAssessSubcontrolMutation = useMutation({
+    mutationFn: (subcontrolId: number) =>
+      controlsApi.aiAssessSubcontrol(String(subcontrolId)),
+    onSuccess: (_, subcontrolId) => {
+      queryClient.invalidateQueries({ queryKey: ['controls'] });
+      queryClient.invalidateQueries({ queryKey: ['control'] });
+      queryClient.invalidateQueries({ queryKey: ['subcontrol', String(subcontrolId)] });
     },
   });
 
@@ -200,7 +227,10 @@ export function Controls() {
             <Button
               variant="outline"
               icon={<Sparkles className="h-4 w-4" />}
-              onClick={() => aiAssessFrameworkMutation.mutate()}
+              onClick={() => {
+                setLastFrameworkResult(null);
+                aiAssessFrameworkMutation.mutate();
+              }}
               disabled={aiAssessFrameworkMutation.isPending}
               loading={aiAssessFrameworkMutation.isPending}
             >
@@ -217,6 +247,32 @@ export function Controls() {
           </Button>
         </div>
       </div>
+
+      {lastFrameworkResult && (
+        <Alert
+          variant={lastFrameworkResult.isCompliant ? 'success' : 'warning'}
+          className="flex items-start justify-between gap-4"
+        >
+          <div>
+            <p className="font-medium">Framework AI assessment complete</p>
+            <p className="mt-1 text-sm opacity-90">{lastFrameworkResult.summary}</p>
+            <p className="mt-1 text-sm">
+              Score: {lastFrameworkResult.score} · {lastFrameworkResult.isCompliant ? 'Compliant' : 'Needs attention'}
+            </p>
+            {lastFrameworkResult.findings && (
+              <p className="mt-2 text-xs opacity-85 line-clamp-2">{lastFrameworkResult.findings}</p>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => setLastFrameworkResult(null)}
+            className="shrink-0 rounded p-1 opacity-70 hover:opacity-100"
+            aria-label="Dismiss"
+          >
+            ×
+          </button>
+        </Alert>
+      )}
 
       {effectiveOrgFrameworkId && controlStats && (
         <div className="grid gap-4 md:grid-cols-4">
@@ -309,12 +365,12 @@ export function Controls() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-10" />
+                  <TableHead className="w-10">&nbsp;</TableHead>
                   <TableHead>Control ID</TableHead>
                   <TableHead>Name</TableHead>
-                  <TableHead>Framework</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="w-28">Applicable</TableHead>
+                  <TableHead className="w-24">AI</TableHead>
                   <TableHead>Progress</TableHead>
                   <TableHead>Owner</TableHead>
                   <TableHead>Actions</TableHead>
@@ -357,10 +413,19 @@ export function Controls() {
                       onRunControlAiAssess={(controlId) =>
                         aiAssessControlMutation.mutate(controlId)
                       }
+                      onRunSubcontrolAiAssess={(subcontrolId) =>
+                        aiAssessSubcontrolMutation.mutate(subcontrolId)
+                      }
                       isAssessingControlId={
                         aiAssessControlMutation.isPending &&
                         aiAssessControlMutation.variables !== undefined
                           ? aiAssessControlMutation.variables
+                          : null
+                      }
+                      isAssessingSubcontrolId={
+                        aiAssessSubcontrolMutation.isPending &&
+                        aiAssessSubcontrolMutation.variables !== undefined
+                          ? aiAssessSubcontrolMutation.variables
                           : null
                       }
                     />
@@ -434,7 +499,9 @@ function ControlRow({
   onSubcontrolApplicabilityChange,
   canRunAIAssessment,
   onRunControlAiAssess,
+  onRunSubcontrolAiAssess,
   isAssessingControlId,
+  isAssessingSubcontrolId,
 }: {
   control: OrganizationControlInstance;
   isExpanded: boolean;
@@ -446,7 +513,9 @@ function ControlRow({
   onSubcontrolApplicabilityChange: (subcontrolId: number, isApplicable: boolean) => void;
   canRunAIAssessment: boolean;
   onRunControlAiAssess: (controlId: number) => void;
+  onRunSubcontrolAiAssess: (subcontrolId: number) => void;
   isAssessingControlId: number | null;
+  isAssessingSubcontrolId: number | null;
 }) {
   const { data: controlDetail, isLoading } = useQuery({
     queryKey: ['control', control.id],
@@ -455,6 +524,7 @@ function ControlRow({
   });
 
   const subcontrols = controlDetail?.subcontrolInstances ?? [];
+  const isAssessingThisControl = isAssessingControlId === control.id;
 
   const handleApplicabilityChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     e.stopPropagation();
@@ -487,14 +557,9 @@ function ControlRow({
           </div>
         </TableCell>
         <TableCell>
-          <Badge size="sm">
-            {control.organizationFramework?.framework?.code?.toUpperCase() ?? '—'}
-          </Badge>
-        </TableCell>
-        <TableCell>
           <StatusBadge status={control.status} />
         </TableCell>
-        <TableCell onClick={(e) => e.stopPropagation()}>
+        <TableCell onClick={(e: MouseEvent<HTMLTableDataCellElement>) => e.stopPropagation()}>
           {canChangeApplicability ? (
             <select
               value={String(control.isApplicable !== false)}
@@ -510,6 +575,57 @@ function ControlRow({
             </span>
           )}
         </TableCell>
+        <TableCell onClick={(e: MouseEvent<HTMLTableDataCellElement>) => e.stopPropagation()}>
+          {isAssessingThisControl ? (
+            <span className="inline-flex items-center gap-1.5 text-xs text-slate-400">
+              <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+              Assessing…
+            </span>
+          ) : control.aiAssessed ? (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Badge
+                size="sm"
+                variant={
+                  control.aiAssessmentResult === 'PASS'
+                    ? 'success'
+                    : control.aiAssessmentResult === 'FAIL'
+                      ? 'danger'
+                      : 'warning'
+                }
+              >
+                {control.aiAssessmentResult}
+              </Badge>
+              {canRunAIAssessment && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 min-w-0 px-1.5 text-xs text-slate-400 hover:text-white"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRunControlAiAssess(control.id);
+                  }}
+                >
+                  Re-run
+                </Button>
+              )}
+            </div>
+          ) : canRunAIAssessment ? (
+            <Button
+              variant="outline"
+              size="sm"
+              icon={<Sparkles className="h-3.5 w-3.5" />}
+              className="h-8"
+              onClick={(e) => {
+                e.stopPropagation();
+                onRunControlAiAssess(control.id);
+              }}
+            >
+              Run AI
+            </Button>
+          ) : (
+            <span className="text-xs text-slate-500">—</span>
+          )}
+        </TableCell>
         <TableCell>
           <div className="w-28">
             <Progress value={control.implementedPct} size="sm" showLabel={false} />
@@ -521,7 +637,7 @@ function ControlRow({
             {control.owner?.name || control.owner?.email || 'Unassigned'}
           </span>
         </TableCell>
-        <TableCell onClick={(e) => e.stopPropagation()}>
+        <TableCell onClick={(e: MouseEvent<HTMLTableDataCellElement>) => e.stopPropagation()}>
           <Button size="sm" variant="ghost" onClick={onUpdateStatus}>
             Update
           </Button>
@@ -543,7 +659,9 @@ function ControlRow({
                   onSubcontrolApplicabilityChange={onSubcontrolApplicabilityChange}
                   canRunAIAssessment={canRunAIAssessment}
                   onRunControlAiAssess={onRunControlAiAssess}
+                  onRunSubcontrolAiAssess={onRunSubcontrolAiAssess}
                   isAssessingControlId={isAssessingControlId}
+                  isAssessingSubcontrolId={isAssessingSubcontrolId}
                 />
               )}
             </div>
@@ -562,6 +680,9 @@ function ExpandedControlContent({
   onSubcontrolApplicabilityChange,
   canRunAIAssessment,
   onRunControlAiAssess,
+  onRunSubcontrolAiAssess,
+  isAssessingControlId,
+  isAssessingSubcontrolId,
 }: {
   control: OrganizationControlInstance;
   subcontrols: OrganizationSubcontrolInstance[];
@@ -570,7 +691,9 @@ function ExpandedControlContent({
   onSubcontrolApplicabilityChange: (subcontrolId: number, isApplicable: boolean) => void;
   canRunAIAssessment: boolean;
   onRunControlAiAssess: (controlId: number) => void;
+  onRunSubcontrolAiAssess: (subcontrolId: number) => void;
   isAssessingControlId: number | null;
+  isAssessingSubcontrolId: number | null;
 }) {
   const fc = control.frameworkControl;
   const isAssessingThisControl = isAssessingControlId === control.id;
@@ -670,6 +793,9 @@ function ExpandedControlContent({
                 onApplicabilityChange={(isApplicable) =>
                   onSubcontrolApplicabilityChange(sub.id, isApplicable)
                 }
+                canRunAIAssessment={canRunAIAssessment}
+                onRunAiAssess={() => onRunSubcontrolAiAssess(sub.id)}
+                isAssessing={isAssessingSubcontrolId === sub.id}
               />
             ))}
           </div>
@@ -684,11 +810,17 @@ function SubcontrolRow({
   onUploadEvidence,
   canChangeApplicability,
   onApplicabilityChange,
+  canRunAIAssessment,
+  onRunAiAssess,
+  isAssessing,
 }: {
   subcontrol: OrganizationSubcontrolInstance;
   onUploadEvidence: (sub: OrganizationSubcontrolInstance) => void;
   canChangeApplicability: boolean;
   onApplicabilityChange: (isApplicable: boolean) => void;
+  canRunAIAssessment: boolean;
+  onRunAiAssess: () => void;
+  isAssessing: boolean;
 }) {
   const fs = subcontrol.frameworkSubcontrol;
   const evidenceCount = subcontrol.evidenceLinks?.length ?? 0;
@@ -729,6 +861,39 @@ function SubcontrolRow({
           <span className="text-xs text-slate-400">
             {isApplicable ? 'Applicable' : 'Not applicable'}
           </span>
+        )}
+        {subcontrol.aiAssessed ? (
+          <Badge
+            size="sm"
+            variant={
+              subcontrol.aiAssessmentResult === 'PASS'
+                ? 'success'
+                : subcontrol.aiAssessmentResult === 'FAIL'
+                  ? 'danger'
+                  : 'warning'
+            }
+          >
+            AI {subcontrol.aiAssessmentResult}
+          </Badge>
+        ) : canRunAIAssessment ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="inline-flex items-center gap-1 text-slate-400 hover:text-white"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onRunAiAssess();
+            }}
+            disabled={isAssessing}
+            loading={isAssessing}
+            icon={<Sparkles className="h-3.5 w-3.5" />}
+          >
+            {isAssessing ? 'Assessing…' : 'AI assess'}
+          </Button>
+        ) : (
+          <span className="text-xs text-slate-500">—</span>
         )}
         <StatusBadge status={subcontrol.status} />
         <div className="w-24">
