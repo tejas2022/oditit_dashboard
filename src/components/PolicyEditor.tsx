@@ -152,6 +152,13 @@ export const PolicyEditor = forwardRef<PolicyEditorHandle, PolicyEditorProps>(
       });
 
       return () => {
+        // Quill 2.0 (Snow theme) prepends the toolbar to the parent of the editor container.
+        // We must remove it explicitly to avoid duplicates in StrictMode/fast-refresh.
+        const parent = el.parentElement;
+        if (parent) {
+          const toolbars = parent.querySelectorAll('.ql-toolbar');
+          toolbars.forEach((tb) => tb.remove());
+        }
         el.innerHTML = '';
         quillInstanceRef.current = null;
       };

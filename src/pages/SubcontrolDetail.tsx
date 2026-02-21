@@ -8,8 +8,10 @@ import {
   Paperclip,
   Send,
   Sparkles,
+  Trash2,
 } from 'lucide-react';
 import { controlsApi } from '../api/controls';
+import { evidenceApi } from '../api/evidence';
 import { EvidenceForSubcontrolModal } from '../components/EvidenceForSubcontrolModal';
 import { EvidencePreviewModal } from '../components/EvidencePreviewModal';
 import {
@@ -78,6 +80,14 @@ export function SubcontrolDetail() {
       queryClient.invalidateQueries({ queryKey: ['subcontrol', id] });
       queryClient.invalidateQueries({ queryKey: ['control'] });
       queryClient.invalidateQueries({ queryKey: ['controls'] });
+    },
+  });
+
+  const unlinkMutation = useMutation({
+    mutationFn: (evidenceId: number) =>
+      evidenceApi.unlinkFromSubcontrol(String(evidenceId), Number(id)),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['subcontrol', id] });
     },
   });
 
@@ -230,13 +240,28 @@ export function SubcontrolDetail() {
                     className="flex items-center justify-between rounded border border-slate-700 bg-slate-800/30 px-3 py-2"
                   >
                     <span className="text-sm text-white">{link.evidence?.name}</span>
-                    <button
-                      type="button"
-                      onClick={() => link.evidence && setPreviewEvidence(link.evidence)}
-                      className="text-xs text-accent hover:underline"
-                    >
-                      View
-                    </button>
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => link.evidence && setPreviewEvidence(link.evidence)}
+                        className="text-xs text-accent hover:underline"
+                      >
+                        View
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (window.confirm('Are you sure you want to detach this evidence?')) {
+                            link.evidenceId && unlinkMutation.mutate(link.evidenceId);
+                          }
+                        }}
+                        disabled={unlinkMutation.isPending}
+                        className="text-slate-500 hover:text-red-400 disabled:opacity-50"
+                        title="Detach evidence"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
                   </li>
                 ))}
               </ul>

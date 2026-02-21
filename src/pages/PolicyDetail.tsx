@@ -328,12 +328,19 @@ export function PolicyDetail() {
             </div>
           ) : (
             <div className="rounded-lg border border-slate-700 bg-slate-900/30 p-4">
-              <pre className="whitespace-pre-wrap break-words font-mono text-sm text-slate-300 min-h-[20rem]">
-                {displayContent ||
-                  (sortedVersions.length === 0
-                    ? 'No versions yet. Click "Add version" to add the first version (paste content or upload a file).'
-                    : 'No content for this version.')}
-              </pre>
+              {displayContent?.trim().startsWith('<') ? (
+                <div
+                  className="ql-editor !p-0 text-slate-300 min-h-[20rem]"
+                  dangerouslySetInnerHTML={{ __html: displayContent }}
+                />
+              ) : (
+                <pre className="whitespace-pre-wrap break-words font-mono text-sm text-slate-300 min-h-[20rem]">
+                  {displayContent ||
+                    (sortedVersions.length === 0
+                      ? 'No versions yet. Click "Add version" to add the first version (paste content or upload a file).'
+                      : 'No content for this version.')}
+                </pre>
+              )}
             </div>
           )}
         </CardContent>
